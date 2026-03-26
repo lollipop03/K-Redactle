@@ -28,6 +28,9 @@ REDACTABLE_TAGS = {
 def fetch_wiki_article(title: str) -> tuple[str, str]:
     """Fetch Korean Wikipedia article plaintext. Returns (resolved_title, text)."""
     url = 'https://ko.wikipedia.org/w/api.php'
+    headers = {
+        'User-Agent': 'K-Redactle-Bot/1.0 (https://github.com/your-username/K-Redactle)'
+    }
     params = {
         'action': 'query',
         'titles': title,
@@ -36,8 +39,19 @@ def fetch_wiki_article(title: str) -> tuple[str, str]:
         'redirects': True,
         'format': 'json',
     }
-    resp = requests.get(url, params=params, timeout=15)
-    data = resp.json()
+    resp = requests.get(url, params=params, headers=headers, timeout=15)
+    
+    if resp.status_code != 200:
+        print(f'  ! Error: Wikipedia API returned status {resp.status_code}')
+        return title, ""
+
+    try:
+        data = resp.json()
+    except Exception as e:
+        print(f'  ! Error decoding JSON: {e}')
+        print(f'  ! Response preview: {resp.text[:100]}')
+        return title, ""
+
     pages = data['query']['pages']
     page = next(iter(pages.values()))
     resolved_title = page.get('title', title)
