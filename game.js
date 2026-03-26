@@ -49,6 +49,11 @@ function init() {
   $('play-again-btn').addEventListener('click', () => { winOverlay.classList.add('hidden'); startGame(); });
   $('play-again-btn-2').addEventListener('click', () => { giveupOverlay.classList.add('hidden'); startGame(); });
   $('reveal-btn-win').addEventListener('click', () => winOverlay.classList.add('hidden'));
+  $('close-win-overlay').addEventListener('click', () => winOverlay.classList.add('hidden'));
+  $('reveal-btn-giveup').addEventListener('click', () => {
+    giveupOverlay.classList.add('hidden');
+    revealEverything();
+  });
 
   window.addEventListener('hashchange', () => {
     // If the hash changed, we likely want to start a new game with that article
@@ -184,11 +189,28 @@ function buildTokenSpan(seg, pi, si) {
   } else {
     span.className = 'token token-redacted';
     span.title = `${seg.surface.length}자`;
+    
+    // Character count badge
+    const badge = document.createElement('span');
+    badge.className = 'char-count-badge';
+    badge.textContent = `${seg.surface.length}자`;
+    span.appendChild(badge);
+
     for (let i = 0; i < seg.surface.length; i++) {
       const charBlock = document.createElement('span');
       charBlock.className = 'token-redacted-char';
       span.appendChild(charBlock);
     }
+
+    // Toggle character count on click
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Remove from others
+      document.querySelectorAll('.token-redacted.show-count').forEach(el => {
+        if (el !== span) el.classList.remove('show-count');
+      });
+      span.classList.toggle('show-count');
+    });
   }
   return span;
 }
@@ -364,6 +386,25 @@ function hideError() {
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+function revealEverything() {
+  state.article.paragraphs.forEach((p, pIdx) => {
+    p.forEach((seg, sIdx) => {
+      if (seg.redactable && seg.lemmas) {
+        seg.lemmas.forEach(l => state.revealedLemmas.add(l.toLowerCase()));
+      }
+    });
+  });
+  renderArticle(state.article);
+  renderTitleBar(state.article);
+}
+
+// Global click listener to hide character count badges
+document.addEventListener('click', () => {
+  document.querySelectorAll('.token-redacted.show-count').forEach(el => {
+    el.classList.remove('show-count');
+  });
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 init();

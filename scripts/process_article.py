@@ -61,8 +61,30 @@ def fetch_wiki_article(title: str) -> tuple[str, str]:
     return resolved_title, text
 
 def clean_text(text: str) -> str:
-    """Remove section headers and trim blank lines."""
-    # Remove == Section == headers
+    """Remove section headers and truncate at reference/footer sections."""
+    # Common markers for the end of the main article content in Korean Wikipedia
+    end_markers = [
+        "== 주석 ==",
+        "== 참고 문헌 ==",
+        "== 참고문헌 ==",
+        "== 외부 링크 ==",
+        "== 외부링크 ==",
+        "== 같이 보기 ==",
+        "== 같이보기 ==",
+        "== 기각된 분류 =="
+    ]
+    
+    # Find the earliest occurrence of any end marker
+    first_marker_pos = len(text)
+    for marker in end_markers:
+        pos = text.find(marker)
+        if pos != -1 and pos < first_marker_pos:
+            first_marker_pos = pos
+            
+    # Truncate text before the first footer section
+    text = text[:first_marker_pos]
+
+    # Remove remaining == Section == headers
     text = re.sub(r'=+[^=]+=+', '', text)
     # Collapse multiple blank lines
     text = re.sub(r'\n{3,}', '\n\n', text)
@@ -77,72 +99,97 @@ def split_paragraphs(text: str, max_para: int = 8) -> list[str]:
 
 def process_paragraph(kiwi: Kiwi, para: str) -> list[dict]:
     """
-    Tokenize a paragraph and return a list of segment dicts.
-    Segments preserve the original text structure (eojeol + spaces).
-    
-    Each segment: { surface, lemma, tag, redactable }
-    Non-morpheme gaps (spaces, punctuation between tokens) are included as
-    non-redactable segments.
+    Tokenize a paragraph using a character-centric approach to avoid duplication
+    and support multiple morphemes per syllable (Korean patchim overlaps).
     """
     tokens = kiwi.tokenize(para)
-    segments = []
-    cursor = 0
+    
+    # Initialize character-based storage
+    # Each entry: { 'char': str, 'lemmas': set, 'redactable': bool, 'is_gap': bool }
+    chars = []
+    for c in para:
+        chars.append({
+            'surface': c,
+            'lemmas': set(),
+            'redactable': False,
+            'is_gap': True # Default to gap, tokens will flip this
+        })
 
     for tok in tokens:
-        start = tok.start
-        end = tok.start + tok.len
-
-        # Gap before this token (spaces, punctuation not captured by kiwi)
-        if cursor < start:
-            gap = para[cursor:start]
-            if gap:
-                segments.append({
-                    'surface': gap,
-                    'lemma': gap,
-                    'tag': 'GAP',
-                    'redactable': False,
-                })
-
-        surface = para[start:end]
-        tag_base = tok.tag.split('-')[0]  # strip -R / -I suffixes
+        tag_base = tok.tag.split('-')[0]
+        is_redactable = tag_base in REDACTABLE_TAGS
         
         # --- Handle Numbers Special Case ---
         if tag_base in ('SN', 'W_SERIAL'):
-            # 1. Remove commas (1,000 -> 1000)
-            surface_clean = surface.replace(',', '')
-            # 2. Split by dots (3.14 -> 3, ., 14)
-            # We use a capturing group in re.split to keep the delimiter (.)
-            parts = re.split(r'(\.)', surface_clean)
-            for part in parts:
-                if not part: continue
-                if part == '.':
-                    segments.append({
-                        'surface': '.',
-                        'lemma': '.',
-                        'tag': 'GAP',
-                        'redactable': False,
-                    })
-                else:
-                    # Treat the numeric part as a redactable SN token
-                    segments.append({
-                        'surface': part,
-                        'lemma': part,
-                        'tag': 'SN',
-                        'redactable': True,
-                    })
-            cursor = end
+            surface = para[tok.start:tok.start + tok.len]
+            # Remove commas (1,000 -> 1000)
+            # Since we are character-centric, we'll mark characters that should be skipped (commas)
+            # and split on dots.
+            
+            dot_positions = []
+            for i in range(tok.start, tok.start + tok.len):
+                if i < len(chars):
+                    c = chars[i]['surface']
+                    if c == ',':
+                        # Mark comma for removal (keep as gap, but it will be filtered out or ignored)
+                        chars[i]['is_gap'] = True
+                        chars[i]['surface'] = "" # effectively remove
+                    elif c == '.':
+                        # Keep dot as a visible gap
+                        chars[i]['is_gap'] = True
+                        chars[i]['redactable'] = False
+                    else:
+                        chars[i]['is_gap'] = False
+                        chars[i]['lemmas'].add(c) # Use the digit itself as the lemma for numbers
+                        if is_redactable:
+                            chars[i]['redactable'] = True
             continue
         # -----------------------------------
+        
+        # Mark all characters covered by this token
+        for i in range(tok.start, tok.start + tok.len):
+            if i < len(chars):
+                chars[i]['is_gap'] = False
+                chars[i]['lemmas'].add(tok.form.lower())
+                if is_redactable:
+                    chars[i]['redactable'] = True
 
-        redactable = tag_base in REDACTABLE_TAGS
+    # Group characters into segments to keep data size reasonable
+    # Grouping rule: adjacent characters with the same redactable status and same lemma set
+    segments = []
+    if not chars:
+        return []
 
-        segments.append({
-            'surface': surface,
-            'lemma': tok.form,
-            'tag': tag_base,
-            'redactable': redactable,
-        })
-        cursor = end
+    current_seg = {
+        'surface': chars[0]['surface'],
+        'lemmas': sorted(list(chars[0]['lemmas'])),
+        'tag': 'GAP' if chars[0]['is_gap'] else 'TOKEN',
+        'redactable': chars[0]['redactable']
+    }
+
+    for i in range(1, len(chars)):
+        c_info = chars[i]
+        if c_info['surface'] == "": continue
+        
+        c_lemmas = sorted(list(c_info['lemmas']))
+        c_tag = 'GAP' if c_info['is_gap'] else 'TOKEN'
+        
+        # If properties match current segment, append to it
+        if (c_lemmas == current_seg['lemmas'] and 
+            c_tag == current_seg['tag'] and 
+            c_info['redactable'] == current_seg['redactable']):
+            current_seg['surface'] += c_info['surface']
+        else:
+            segments.append(current_seg)
+            current_seg = {
+                'surface': c_info['surface'],
+                'lemmas': c_lemmas,
+                'tag': c_tag,
+                'redactable': c_info['redactable']
+            }
+    
+    segments.append(current_seg)
+    return segments
 
     # Trailing gap
     if cursor < len(para):
