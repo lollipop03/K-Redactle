@@ -49,11 +49,25 @@ function init() {
   $('play-again-btn').addEventListener('click', () => { winOverlay.classList.add('hidden'); startGame(); });
   $('play-again-btn-2').addEventListener('click', () => { giveupOverlay.classList.add('hidden'); startGame(); });
   $('reveal-btn-win').addEventListener('click', () => winOverlay.classList.add('hidden'));
+
+  window.addEventListener('hashchange', () => {
+    // If the hash changed, we likely want to start a new game with that article
+    startGame();
+  });
 }
 
 function startGame() {
-  // Pick a random article
-  const article = ARTICLES[Math.floor(Math.random() * ARTICLES.length)];
+  // Pick an article: check for hash index first (e.g. index.html#2)
+  let articleIndex = -1;
+  const hash = window.location.hash.slice(1);
+  if (hash && !isNaN(hash)) {
+    articleIndex = parseInt(hash, 10);
+  }
+
+  const article = (articleIndex >= 0 && articleIndex < ARTICLES.length)
+    ? ARTICLES[articleIndex]
+    : ARTICLES[Math.floor(Math.random() * ARTICLES.length)];
+
   state = {
     article,
     guesses: [],
@@ -240,8 +254,6 @@ function revealTokensByLemma(lemma) {
 
   // Re-render title bar in case title lemma was guessed
   renderTitleBar(state.article);
-  articleTitleEl.innerHTML = '';
-  buildTitleTokens(state.article).forEach(el => articleTitleEl.appendChild(el));
 }
 
 function addHistoryItem(word, count, correct) {
@@ -268,9 +280,20 @@ function updateStats() {
 }
 
 function showWin() {
-  $('win-article-title').textContent = state.article.title;
+  const title = state.article.title;
+  const url = state.article.sourceUrl || `https://ko.wikipedia.org/wiki/${title.replace(/ /g, '_')}`;
+  
+  $('win-article-title').textContent = title;
   $('win-guess-count').textContent = state.guesses.length;
   $('win-correct-count').textContent = state.guesses.filter(g => g.correct).length;
+  
+  // Update link
+  const link = $('win-wiki-link');
+  if (link) {
+    link.href = url;
+    link.textContent = title;
+  }
+  
   winOverlay.classList.remove('hidden');
 }
 
@@ -309,6 +332,16 @@ function giveUp() {
   $('giveup-article-title').textContent = state.article.title;
   $('giveup-guess-count').textContent = state.guesses.length;
   $('giveup-correct-count').textContent = state.guesses.filter(g => g.correct).length;
+  
+  // Update link
+  const title = state.article.title;
+  const url = state.article.sourceUrl || `https://ko.wikipedia.org/wiki/${title.replace(/ /g, '_')}`;
+  const link = $('giveup-wiki-link');
+  if (link) {
+    link.href = url;
+    link.textContent = title;
+  }
+  
   giveupOverlay.classList.remove('hidden');
 }
 
