@@ -7,12 +7,14 @@ import { ARTICLES } from './data/articles.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let state = {
-  article: null,        // current article data
-  guesses: [],          // { word, count, correct }
+  article: null,
+  guesses: [],
   revealedLemmas: new Set(),
   totalRedactable: 0,
   totalRevealed: 0,
   won: false,
+  highlightedLemma: null,
+  highlightIndex: -1,
 };
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -170,46 +172,49 @@ function buildTitleTokens(article) {
 }
 
 function buildTokenSpan(seg, pi, si) {
+  const span = document.createElement('span');
+  span.dataset.pi = pi;
+  span.dataset.si = si;
+
   if (!seg.redactable) {
-    const span = document.createElement('span');
     span.className = 'token';
     span.textContent = seg.surface;
     return span;
   }
 
-  const revealed = state.revealedLemmas.has(seg.lemma);
-  const span = document.createElement('span');
-  span.dataset.pi = pi;
-  span.dataset.si = si;
-  span.dataset.lemma = seg.lemma;
+  // Multi-lemma support
+  const lemmasMatch = seg.lemmas && seg.lemmas.some(l => state.revealedLemmas.has(l.toLowerCase()));
+  const isTitleLemma = seg.lemmas && seg.lemmas.some(l => state.article.titleLemmas.includes(l));
+  const revealed = state.won || isTitleLemma || lemmasMatch;
 
   if (revealed) {
     span.className = 'token token-revealed';
     span.textContent = seg.surface;
+    // Check for highlight
+    if (state.highlightedLemma && seg.lemmas.includes(state.highlightedLemma)) {
+      span.classList.add('highlight-active');
+    }
   } else {
     span.className = 'token token-redacted';
     span.title = `${seg.surface.length}자`;
     
-    // Character count badge
     const badge = document.createElement('span');
     badge.className = 'char-count-badge';
     badge.textContent = `${seg.surface.length}자`;
     span.appendChild(badge);
 
     for (let i = 0; i < seg.surface.length; i++) {
-      const charBlock = document.createElement('span');
-      charBlock.className = 'token-redacted-char';
-      span.appendChild(charBlock);
+        const charBlock = document.createElement('span');
+        charBlock.className = 'token-redacted-char';
+        span.appendChild(charBlock);
     }
 
-    // Toggle character count on click
     span.addEventListener('click', (e) => {
-      e.stopPropagation();
-      // Remove from others
-      document.querySelectorAll('.token-redacted.show-count').forEach(el => {
-        if (el !== span) el.classList.remove('show-count');
-      });
-      span.classList.toggle('show-count');
+        e.stopPropagation();
+        document.querySelectorAll('.token-redacted.show-count').forEach(el => {
+            if (el !== span) el.classList.remove('show-count');
+        });
+        span.classList.toggle('show-count');
     });
   }
   return span;
@@ -243,7 +248,7 @@ function submitGuess() {
   let matchCount = 0;
   state.article.paragraphs.forEach(para => {
     para.forEach(seg => {
-      if (seg.redactable && seg.lemma === word) matchCount++;
+      if (seg.redactable && seg.lemmas && seg.lemmas.includes(word)) matchCount++;
     });
   });
 
@@ -256,7 +261,11 @@ function submitGuess() {
   state.guesses.unshift({ word, count: matchCount, correct });
   addHistoryItem(word, matchCount, correct);
 
-  if (correct) revealTokensByLemma(word);
+  if (correct) {
+    revealTokensByLemma(word);
+    // Auto-highlight latest correct guess
+    jumpToGuess(word);
+  }
   updateStats();
 
   // Check win: all title lemmas guessed
@@ -271,19 +280,8 @@ function submitGuess() {
 }
 
 function revealTokensByLemma(lemma) {
-  // Update all matching spans in article
-  document.querySelectorAll(`[data-lemma="${lemma}"]`).forEach(span => {
-    const pi = +span.dataset.pi;
-    const si = +span.dataset.si;
-    const seg = state.article.paragraphs[pi][si];
-    span.className = 'token token-revealed';
-    span.textContent = seg.surface;
-    span.removeAttribute('style');
-    span.removeAttribute('title');
-  });
-
-  // Re-render title bar in case title lemma was guessed
-  renderTitleBar(state.article);
+  // We need to re-render to update all character-centric segments properly
+  renderArticle(state.article);
 }
 
 function addHistoryItem(word, count, correct) {
@@ -293,6 +291,10 @@ function addHistoryItem(word, count, correct) {
     <span class="guess-item-word">${escHtml(word)}</span>
     <span class="guess-item-count">${correct ? `+${count}` : '✗'}</span>
   `;
+  if (correct) {
+    li.style.cursor = 'pointer';
+    li.addEventListener('click', () => jumpToGuess(word));
+  }
   guessHistory.insertBefore(li, guessHistory.firstChild);
 }
 
@@ -329,51 +331,14 @@ function showWin() {
 
 function giveUp() {
   if (state.won) return;
-  // Reveal everything
-  state.article.paragraphs.forEach(para => {
-    para.forEach(seg => {
-      if (seg.redactable) state.revealedLemmas.add(seg.lemma);
-    });
-  });
-  state.totalRevealed = state.totalRedactable;
-
-  // Re-render all tokens
-  document.querySelectorAll('.token-redacted[data-lemma]').forEach(span => {
-    const pi = +span.dataset.pi;
-    const si = +span.dataset.si;
-    const seg = state.article.paragraphs[pi][si];
-    if (seg) {
-      span.className = 'token token-revealed';
-      span.style.color = 'var(--text-muted)';
-      span.textContent = seg.surface;
-      span.removeAttribute('style');
-    }
-  });
-
-  // Reveal title
-  articleTitleEl.innerHTML = '';
-  const span = document.createElement('span');
-  span.className = 'token token-title-revealed';
-  span.textContent = state.article.title;
-  articleTitleEl.appendChild(span);
-
-  updateStats();
-
-  $('giveup-article-title').textContent = state.article.title;
-  $('giveup-guess-count').textContent = state.guesses.length;
-  $('giveup-correct-count').textContent = state.guesses.filter(g => g.correct).length;
-  
-  // Update link
-  const title = state.article.title;
-  const url = state.article.sourceUrl || `https://ko.wikipedia.org/wiki/${title.replace(/ /g, '_')}`;
-  const link = $('giveup-wiki-link');
-  if (link) {
-    link.href = url;
-    link.textContent = title;
-  }
-  
+  revealEverything();
   giveupOverlay.classList.remove('hidden');
 }
+
+
+
+
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function showError(msg) {
@@ -388,15 +353,37 @@ function escHtml(s) {
 }
 
 function revealEverything() {
-  state.article.paragraphs.forEach((p, pIdx) => {
-    p.forEach((seg, sIdx) => {
+  state.won = true;
+  state.article.paragraphs.forEach(p => {
+    p.forEach(seg => {
       if (seg.redactable && seg.lemmas) {
         seg.lemmas.forEach(l => state.revealedLemmas.add(l.toLowerCase()));
       }
     });
   });
+  state.totalRevealed = state.totalRedactable;
   renderArticle(state.article);
   renderTitleBar(state.article);
+  updateStats();
+}
+
+function jumpToGuess(lemma) {
+  if (state.highlightedLemma !== lemma) {
+    state.highlightedLemma = lemma;
+    state.highlightIndex = 0;
+  } else {
+    state.highlightIndex++;
+  }
+
+  // Re-render to show yellow highlights
+  renderArticle(state.article);
+  
+  const matches = document.querySelectorAll('.highlight-active');
+  if (matches.length > 0) {
+    const idx = state.highlightIndex % matches.length;
+    const target = matches[idx];
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 // Global click listener to hide character count badges

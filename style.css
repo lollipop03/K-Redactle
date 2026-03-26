@@ -307,11 +307,10 @@ body {
 
 .token-redacted {
   display: inline-flex;
-  gap: 2px;
   vertical-align: middle;
-  cursor: pointer; /* Change to pointer to indicate clickable */
+  cursor: pointer;
   transition: opacity var(--transition);
-  position: relative; /* For char count positioning */
+  position: relative;
 }
 
 /* Character count indicator */
@@ -385,7 +384,16 @@ footer a:hover {
     text-decoration: underline;
 }
 
-/* ── Responsive ─────────────────────────────────────── */
+/* Highlighting */
+.highlight-active {
+  background: var(--gold) !important;
+  color: #000 !important;
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--gold);
+  z-index: 5;
+  position: relative;
+}
+
 @media (max-width: 768px) {
   .main { grid-template-columns: 1fr; }
   .sidebar {
