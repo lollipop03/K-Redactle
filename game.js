@@ -13,6 +13,8 @@ let state = {
   totalRedactable: 0,
   totalRevealed: 0,
   won: false,
+  gameEnded: false,
+  gameEndType: null, // 'win' or 'giveup'
   highlightedLemma: null,
   highlightIndex: -1,
 };
@@ -57,10 +59,8 @@ function init() {
     revealEverything();
   });
   $('view-results-btn').addEventListener('click', () => {
-    if (state.totalRevealed === state.totalRedactable) {
-        // Find out if we won or gave up
-        const won = state.article.titleLemmas.every(l => state.revealedLemmas.has(l));
-        if (won) winOverlay.classList.remove('hidden');
+    if (state.gameEnded) {
+        if (state.gameEndType === 'win') winOverlay.classList.remove('hidden');
         else giveupOverlay.classList.remove('hidden');
     }
   });
@@ -90,6 +90,8 @@ function startGame() {
     totalRedactable: 0,
     totalRevealed: 0,
     won: false,
+    gameEnded: false,
+    gameEndType: null,
   };
 
   renderArticle(article);
@@ -184,6 +186,9 @@ function buildTokenSpan(seg, pi, si) {
   const span = document.createElement('span');
   span.dataset.pi = pi;
   span.dataset.si = si;
+  if (seg.lemmas) {
+    span.dataset.lemmas = seg.lemmas.join(',').toLowerCase();
+  }
 
   if (!seg.redactable) {
     span.className = 'token';
@@ -288,8 +293,21 @@ function submitGuess() {
 }
 
 function revealTokensByLemma(lemma) {
-  // We need to re-render to update all character-centric segments properly
-  renderArticle(state.article);
+  const normalized = lemma.toLowerCase();
+  document.querySelectorAll(`.token-redacted[data-lemmas]`).forEach(span => {
+    const lemmas = span.dataset.lemmas.split(',');
+    if (lemmas.includes(normalized)) {
+      const pi = +span.dataset.pi;
+      const si = +span.dataset.si;
+      const seg = state.article.paragraphs[pi][si];
+      
+      // Update the span to revealed state
+      span.innerHTML = '';
+      span.className = 'token token-revealed';
+      span.textContent = seg.surface;
+      span.removeAttribute('title');
+    }
+  });
 }
 
 function addHistoryItem(word, count, correct) {
@@ -320,6 +338,9 @@ function updateStats() {
 }
 
 function showWin() {
+  state.gameEnded = true;
+  state.gameEndType = 'win';
+  revealEverything(); // Reveal as requested
   const title = state.article.title;
   const url = state.article.sourceUrl || `https://ko.wikipedia.org/wiki/${title.replace(/ /g, '_')}`;
   
@@ -339,15 +360,12 @@ function showWin() {
 }
 
 function giveUp() {
-  if (state.won) return;
+  if (state.won || state.gameEnded) return;
+  state.gameEnded = true;
+  state.gameEndType = 'giveup';
   revealEverything();
   giveupOverlay.classList.remove('hidden');
 }
-
-
-
-
-
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function showError(msg) {
@@ -379,20 +397,33 @@ function revealEverything() {
 }
 
 function jumpToGuess(lemma) {
-  if (state.highlightedLemma !== lemma) {
-    state.highlightedLemma = lemma;
+  const normalized = lemma.toLowerCase();
+  
+  if (state.highlightedLemma !== normalized) {
+    state.highlightedLemma = normalized;
     state.highlightIndex = 0;
   } else {
     state.highlightIndex++;
   }
 
-  // Re-render to show yellow highlights
-  renderArticle(state.article);
+  // Remove existing highlights
+  document.querySelectorAll('.highlight-active').forEach(el => {
+    el.classList.remove('highlight-active');
+  });
+
+  // Find all segments with this lemma and highlight them
+  const targets = [];
+  document.querySelectorAll(`.token-revealed[data-lemmas]`).forEach(span => {
+    const lemmas = span.dataset.lemmas.split(',');
+    if (lemmas.includes(normalized)) {
+      span.classList.add('highlight-active');
+      targets.push(span);
+    }
+  });
   
-  const matches = document.querySelectorAll('.highlight-active');
-  if (matches.length > 0) {
-    const idx = state.highlightIndex % matches.length;
-    const target = matches[idx];
+  if (targets.length > 0) {
+    const idx = state.highlightIndex % targets.length;
+    const target = targets[idx];
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }

@@ -3,6 +3,19 @@
    Dark mode, Noto Sans KR, premium feel
    ===================================================== */
 
+/* ── Footer ────────────────────────────────────────── */
+.game-footer {
+  margin-top: 4rem;
+  padding: 2rem 0;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+.game-footer p { margin-bottom: 0.4rem; }
+.game-footer a { color: var(--text-muted); text-decoration: none; }
+.game-footer a:hover { text-decoration: underline; }
+
 :root {
   --bg:         #0d0f14;
   --bg-2:       #13161e;
