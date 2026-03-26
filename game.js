@@ -56,6 +56,14 @@ function init() {
     giveupOverlay.classList.add('hidden');
     revealEverything();
   });
+  $('view-results-btn').addEventListener('click', () => {
+    if (state.totalRevealed === state.totalRedactable) {
+        // Find out if we won or gave up
+        const won = state.article.titleLemmas.every(l => state.revealedLemmas.has(l));
+        if (won) winOverlay.classList.remove('hidden');
+        else giveupOverlay.classList.remove('hidden');
+    }
+  });
 
   window.addEventListener('hashchange', () => {
     // If the hash changed, we likely want to start a new game with that article
@@ -100,6 +108,7 @@ function startGame() {
   guessError.classList.add('hidden');
   winOverlay.classList.add('hidden');
   giveupOverlay.classList.add('hidden');
+  $('view-results-btn').classList.add('hidden');
 
   setTimeout(() => guessInput.focus(), 600);
 }
@@ -184,8 +193,7 @@ function buildTokenSpan(seg, pi, si) {
 
   // Multi-lemma support
   const lemmasMatch = seg.lemmas && seg.lemmas.some(l => state.revealedLemmas.has(l.toLowerCase()));
-  const isTitleLemma = seg.lemmas && seg.lemmas.some(l => state.article.titleLemmas.includes(l));
-  const revealed = state.won || isTitleLemma || lemmasMatch;
+  const revealed = state.won || lemmasMatch;
 
   if (revealed) {
     span.className = 'token token-revealed';
@@ -327,6 +335,7 @@ function showWin() {
   }
   
   winOverlay.classList.remove('hidden');
+  $('view-results-btn').classList.remove('hidden');
 }
 
 function giveUp() {
@@ -363,8 +372,10 @@ function revealEverything() {
   });
   state.totalRevealed = state.totalRedactable;
   renderArticle(state.article);
+  articleTitleEl.innerHTML = '';
   renderTitleBar(state.article);
   updateStats();
+  $('view-results-btn').classList.remove('hidden');
 }
 
 function jumpToGuess(lemma) {
