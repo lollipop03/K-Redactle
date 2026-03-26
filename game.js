@@ -149,11 +149,16 @@ function buildTitleTokens(article) {
     span.textContent = title;
     els.push(span);
   } else {
-    // Show redacted block proportional to title length
+    // Show redacted blocks for each character
     const span = document.createElement('span');
     span.className = 'token-redacted';
-    span.style.width = `${title.length * 0.85}em`;
     span.title = `${title.length}자`;
+    
+    for (let i = 0; i < title.length; i++) {
+      const charBlock = document.createElement('span');
+      charBlock.className = 'token-redacted-char';
+      span.appendChild(charBlock);
+    }
     els.push(span);
   }
   return els;
@@ -178,9 +183,12 @@ function buildTokenSpan(seg, pi, si) {
     span.textContent = seg.surface;
   } else {
     span.className = 'token token-redacted';
-    // Width proportional to surface length (Korean chars are wide)
-    span.style.width = `${seg.surface.length * 1.05}em`;
     span.title = `${seg.surface.length}자`;
+    for (let i = 0; i < seg.surface.length; i++) {
+      const charBlock = document.createElement('span');
+      charBlock.className = 'token-redacted-char';
+      span.appendChild(charBlock);
+    }
   }
   return span;
 }

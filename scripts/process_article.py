@@ -23,6 +23,8 @@ REDACTABLE_TAGS = {
     'XR',    # 어근
     'SL',    # 외국어
     'SH',    # 한자
+    'SN',    # 숫자
+    'W_SERIAL', # 시리얼 번호/날짜 등
 }
 
 def fetch_wiki_article(title: str) -> tuple[str, str]:
@@ -103,6 +105,35 @@ def process_paragraph(kiwi: Kiwi, para: str) -> list[dict]:
 
         surface = para[start:end]
         tag_base = tok.tag.split('-')[0]  # strip -R / -I suffixes
+        
+        # --- Handle Numbers Special Case ---
+        if tag_base in ('SN', 'W_SERIAL'):
+            # 1. Remove commas (1,000 -> 1000)
+            surface_clean = surface.replace(',', '')
+            # 2. Split by dots (3.14 -> 3, ., 14)
+            # We use a capturing group in re.split to keep the delimiter (.)
+            parts = re.split(r'(\.)', surface_clean)
+            for part in parts:
+                if not part: continue
+                if part == '.':
+                    segments.append({
+                        'surface': '.',
+                        'lemma': '.',
+                        'tag': 'GAP',
+                        'redactable': False,
+                    })
+                else:
+                    # Treat the numeric part as a redactable SN token
+                    segments.append({
+                        'surface': part,
+                        'lemma': part,
+                        'tag': 'SN',
+                        'redactable': True,
+                    })
+            cursor = end
+            continue
+        # -----------------------------------
+
         redactable = tag_base in REDACTABLE_TAGS
 
         segments.append({

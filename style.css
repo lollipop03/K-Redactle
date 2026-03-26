@@ -291,17 +291,21 @@ body {
 
 /* Redacted token */
 .token-redacted {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+  cursor: default;
+  transition: opacity var(--transition);
+}
+.token-redacted-char {
   display: inline-block;
   background: var(--redacted);
-  border-radius: 3px;
-  vertical-align: middle;
+  border-radius: 2px;
   height: 1.1em;
-  min-width: 1.5ch;
-  cursor: default;
+  width: 0.9em; /* slightly narrower for character blocks */
   transition: background var(--transition);
-  position: relative;
 }
-.token-redacted:hover { background: var(--redacted-hover); }
+.token-redacted:hover .token-redacted-char { background: var(--redacted-hover); }
 
 /* Revealed token */
 .token-revealed {
