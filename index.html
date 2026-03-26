@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K-Redactle — 한국어 위키피디아 단어 맞추기</title>
+  <meta name="description" content="숨겨진 한국어 위키피디아 문서의 제목을 최소한의 추측으로 맞춰보세요." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Loading screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-inner">
+      <div class="loading-logo">K-Redactle</div>
+      <div class="loading-spinner"></div>
+      <p class="loading-text">아티클 로딩 중...</p>
+    </div>
+  </div>
+
+  <!-- Win overlay -->
+  <div id="win-overlay" class="overlay hidden">
+    <div class="overlay-card">
+      <div class="overlay-emoji">🎉</div>
+      <h2 class="overlay-title">정답!</h2>
+      <p id="win-article-title" class="overlay-article-name"></p>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span id="win-guess-count" class="stat-value">0</span>
+          <span class="stat-label">추측 횟수</span>
+        </div>
+        <div class="stat-box">
+          <span id="win-correct-count" class="stat-value">0</span>
+          <span class="stat-label">맞춘 단어</span>
+        </div>
+      </div>
+      <div class="overlay-buttons">
+        <button id="play-again-btn" class="btn btn-primary">다른 문제 풀기</button>
+        <button id="reveal-btn-win" class="btn btn-ghost">정답 보기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Give-up overlay -->
+  <div id="giveup-overlay" class="overlay hidden">
+    <div class="overlay-card">
+      <div class="overlay-emoji">😔</div>
+      <h2 class="overlay-title">아쉽네요...</h2>
+      <p id="giveup-article-title" class="overlay-article-name"></p>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span id="giveup-guess-count" class="stat-value">0</span>
+          <span class="stat-label">추측 횟수</span>
+        </div>
+        <div class="stat-box">
+          <span id="giveup-correct-count" class="stat-value">0</span>
+          <span class="stat-label">맞춘 단어</span>
+        </div>
+      </div>
+      <div class="overlay-buttons">
+        <button id="play-again-btn-2" class="btn btn-primary">다른 문제 풀기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div id="app" class="app hidden">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-inner">
+        <div class="logo">K-Redactle</div>
+        <div class="header-meta">
+          <span id="header-progress" class="header-progress"></span>
+        </div>
+        <div class="header-actions">
+          <button id="how-to-play-btn" class="btn btn-ghost btn-sm" title="게임 방법">?</button>
+          <button id="give-up-btn" class="btn btn-ghost btn-sm btn-danger">포기</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- How to play tooltip -->
+    <div id="how-to-play" class="how-to-play hidden">
+      <button id="close-how-to-play" class="how-to-play-close">✕</button>
+      <h3>🎮 게임 방법</h3>
+      <ul>
+        <li><span class="redacted-demo">████</span> 블록이 숨겨진 단어입니다.</li>
+        <li>블록 길이가 단어 길이와 비례합니다.</li>
+        <li>한국어 <strong>명사, 동사, 형용사</strong>의 기본형을 입력하세요.</li>
+        <li>맞는 단어는 <span class="revealed-demo">초록색</span>으로 표시됩니다.</li>
+        <li>제목 단어를 모두 맞추면 승리!</li>
+      </ul>
+    </div>
+
+    <main class="main">
+      <!-- Guess panel (left/top) -->
+      <aside class="sidebar">
+        <div class="guess-input-area">
+          <label class="input-label" for="guess-input">단어 추측</label>
+          <div class="input-row">
+            <input
+              id="guess-input"
+              type="text"
+              class="guess-input"
+              placeholder="명사, 동사, 형용사..."
+              autocomplete="off"
+              autocorrect="off"
+              spellcheck="false"
+            />
+            <button id="guess-btn" class="btn btn-primary btn-submit">→</button>
+          </div>
+          <p id="guess-error" class="guess-error hidden"></p>
+        </div>
+
+        <div class="stats-summary">
+          <div class="stat-inline">
+            <span class="stat-inline-value" id="total-guesses">0</span>
+            <span class="stat-inline-label">추측</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-inline">
+            <span class="stat-inline-value" id="total-revealed">0</span>
+            <span class="stat-inline-label">단어 공개</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-inline">
+            <span class="stat-inline-value" id="total-tokens">0</span>
+            <span class="stat-inline-label">전체 단어</span>
+          </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="progress-bar-wrap">
+          <div id="progress-bar" class="progress-bar" style="width:0%"></div>
+        </div>
+        <p class="progress-label" id="progress-label">0% 공개됨</p>
+
+        <!-- Guess history -->
+        <div class="guess-history-header">추측 기록</div>
+        <ul id="guess-history" class="guess-history"></ul>
+      </aside>
+
+      <!-- Article panel -->
+      <section class="article-section">
+        <div class="article-title-bar">
+          <span class="article-label">위키피디아 문서</span>
+          <span id="article-title-display" class="article-title-redacted"></span>
+        </div>
+        <div id="article-content" class="article-content"></div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="game.js"></script>
+</body>
+</html>

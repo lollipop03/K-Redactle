@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Dev tools
+.DS_Store
+Thumbs.db
+
+# scripts are local-only tooling, not needed on GitHub Pages
+# (keep scripts/ in repo but note data/ output is committed)
